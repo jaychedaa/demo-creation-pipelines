@@ -70,7 +70,7 @@ jobs:
           BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key || secrets.BROWSERSTACK_ACCESS_KEY }}
 
       - name: Run Percy Mobile Baseline Tests
-        run: npm run wdio:app-percy
+        run: percy exec -- wdio run config/wdio.app-percy-baseline.conf.ts
         env:
           PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
           PERCY_BRANCH: master
