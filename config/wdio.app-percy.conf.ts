@@ -19,8 +19,7 @@ export const config: WebdriverIO.Config = {
        ========================================================= */
     {
       platformName: "android",
-      "appium:app": "bs-demo-android",
-      //  "appium:app": "bs-demo-app-percy-changed-android",
+      "appium:app": "bs-demo-app-percy-changed-android",
       "appium:automationName": "UiAutomator2",
       "appium:allowInvisibleElements": true,
 
@@ -39,8 +38,7 @@ export const config: WebdriverIO.Config = {
        ========================================================= */
     {
       platformName: "ios",
-      "appium:app": "bs-demo-ios",
-      //  "appium:app": "bs-demo-app-percy-changed-ios",
+      "appium:app": "bs-demo-app-percy-changed-ios",
       "appium:automationName": "XCUITest",
 
       specs: ["../test/specs/percy-mobile/percy-ios.spec.ts"],
