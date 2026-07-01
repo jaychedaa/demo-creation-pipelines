@@ -1,0 +1,80 @@
+name: Percy Mobile Baseline (Master)
+
+on:
+  workflow_dispatch:
+    inputs:
+      percy_token:
+        description: "Percy Token (leave blank to use stored secret)"
+        required: false
+        type: string
+      bs_username:
+        description: "BrowserStack Username"
+        required: true
+        type: string
+      bs_access_key:
+        description: "BrowserStack Access Key"
+        required: true
+        type: string
+  schedule:
+    # Runs every 15 days at midnight UTC
+    - cron: "0 0 1,16 * *"
+
+jobs:
+  percy-mobile-baseline:
+    name: Establish Percy Mobile Master Baseline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout master branch
+        uses: actions/checkout@v4.2.2
+        with:
+          ref: master
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Download Original Apps from Upstream Releases and Upload to BrowserStack
+        run: |
+          # Fetch latest release from the upstream repo
+          RELEASE=$(curl -s https://api.github.com/repos/saqib-browserstack/demo-creation-pipelines/releases/latest)
+
+          # Download original Android APK
+          APK_URL=$(echo "$RELEASE" | jq -r '.assets[] | select(.name == "bs-demo-android.apk") | .browser_download_url')
+          echo "Downloading original Android APK from: $APK_URL"
+          curl -L "$APK_URL" -o app.apk
+
+          # Download original iOS IPA
+          IPA_URL=$(echo "$RELEASE" | jq -r '.assets[] | select(.name == "bs-demo-ios.ipa") | .browser_download_url')
+          echo "Downloading original iOS IPA from: $IPA_URL"
+          curl -L "$IPA_URL" -o app.ipa
+
+          # Upload Android to BrowserStack with original custom ID
+          echo "Uploading original Android app to BrowserStack..."
+          curl -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@app.apk" \
+            -F "custom_id=bs-demo-android"
+
+          # Upload iOS to BrowserStack with original custom ID
+          echo "Uploading original iOS app to BrowserStack..."
+          curl -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@app.ipa" \
+            -F "custom_id=bs-demo-ios"
+        env:
+          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username || secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key || secrets.BROWSERSTACK_ACCESS_KEY }}
+
+      - name: Run Percy Mobile Baseline Tests
+        run: npm run wdio:app-percy
+        env:
+          PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
+          PERCY_BRANCH: master
+          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username || secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key || secrets.BROWSERSTACK_ACCESS_KEY }}
