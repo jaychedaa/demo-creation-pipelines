@@ -80,18 +80,26 @@ jobs:
 
       - name: Create and Push Branch
         run: |
-          if [ "${{ github.event.inputs.figma_comparison }}" = "true" ]; then
-            BRANCH_NAME="figma"
-          else
-            BRANCH_NAME="changed_${{ github.actor }}"
-          fi
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+
+          # Always create/push the changed_<actor> branch
+          CHANGED_BRANCH="changed_${{ github.actor }}"
+          git checkout -b "$CHANGED_BRANCH" 2>/dev/null || git checkout "$CHANGED_BRANCH"
           echo "Percy mobile run triggered by ${{ github.actor }} at $(date)" >> .percy-trigger
           git add .percy-trigger
           git commit -m "chore: percy mobile run by ${{ github.actor }}" --allow-empty
-          git push origin "$BRANCH_NAME" --force
+          git push origin "$CHANGED_BRANCH" --force
+
+          # If figma_comparison is enabled, also create/push the figma branch
+          if [ "${{ github.event.inputs.figma_comparison }}" = "true" ]; then
+            git checkout main
+            git checkout -b figma 2>/dev/null || git checkout figma
+            echo "Percy figma comparison run triggered by ${{ github.actor }} at $(date)" >> .percy-trigger
+            git add .percy-trigger
+            git commit -m "chore: percy figma comparison run by ${{ github.actor }}" --allow-empty
+            git push origin figma --force
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -103,3 +111,12 @@ jobs:
           BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
           BUILD_COMPARISON: ${{ github.event.inputs.build_comparison }}
           FIGMA_COMPARISON: ${{ github.event.inputs.figma_comparison }}
+
+      - name: Run Percy Figma Comparison
+        if: ${{ github.event.inputs.figma_comparison == 'true' }}
+        run: npx wdio run config/wdio.app-percy.conf.ts --spec test/specs/percy-mobile/percy-figma-comparison.e2e.ts
+        env:
+          PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
+          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
+          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+          FIGMA_COMPARISON: "true"
