@@ -93,7 +93,6 @@ jobs:
 
           # If figma_comparison is enabled, also create/push the figma branch
           if [ "${{ github.event.inputs.figma_comparison }}" = "true" ]; then
-            git checkout main
             git checkout -b figma 2>/dev/null || git checkout figma
             echo "Percy figma comparison run triggered by ${{ github.actor }} at $(date)" >> .percy-trigger
             git add .percy-trigger
