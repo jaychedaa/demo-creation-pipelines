@@ -3,60 +3,103 @@ name: Percy Mobile Visual Tests
 on:
   workflow_dispatch:
     inputs:
-      username:
-        description: "Your GitHub username (branch checked out: changed_<username>)"
+      percy_token:
+        description: "Percy Token (leave blank to use stored secret)"
+        required: false
+        type: string
+      bs_username:
+        description: "BrowserStack Username"
         required: true
         type: string
-      baseline:
-        description: "Compare against which baseline?"
+      bs_access_key:
+        description: "BrowserStack Access Key"
         required: true
-        type: choice
-        options:
-          - master
-          - Figma
+        type: string
+      build_comparison:
+        description: "Build Comparison (compare against master baseline)"
+        required: false
+        type: boolean
+        default: false
+      figma_comparison:
+        description: "Figma Comparison (compare against Figma baseline)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  percy-mobile:
+  percy-mobile-tests:
     name: Run Percy Mobile Visual Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout branch changed_${{ github.event.inputs.username }}
-        uses: actions/checkout@v4
-        with:
-          ref: changed_${{ github.event.inputs.username }}
+      - name: Checkout Repository
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
 
-      # ── Baseline: master ──────────────────────────────────────────────────────
-      # Percy compares the current build against the master baseline automatically
-      # when PERCY_BRANCH is set to the feature branch and the master baseline
-      # already exists (maintained by the scheduled cron job).
-      - name: Run Percy Mobile Tests (compare vs master)
-        if: ${{ github.event.inputs.baseline == 'master' }}
-        run: npm run wdio:app-percy
-        env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
-          PERCY_BRANCH: changed_${{ github.event.inputs.username }}
-          PERCY_TARGET_BRANCH: master
-          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
-          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      - name: Download Apps from Upstream Releases and Upload to BrowserStack
+        run: |
+          # Fetch latest release from the upstream repo
+          RELEASE=$(curl -s https://api.github.com/repos/saqib-browserstack/demo-creation-pipelines/releases/latest)
 
-      # ── Baseline: Figma ───────────────────────────────────────────────────────
-      # Percy compares the current build against the Figma branch baseline.
-      - name: Run Percy Mobile Tests (compare vs Figma)
-        if: ${{ github.event.inputs.baseline == 'Figma' }}
+          # Download changed Android APK
+          APK_URL=$(echo "$RELEASE" | jq -r '.assets[] | select(.name == "bs-demo-app-percy-changed-android.apk") | .browser_download_url')
+          echo "Downloading changed Android APK from: $APK_URL"
+          curl -L "$APK_URL" -o app.apk
+
+          # Download changed iOS IPA
+          IPA_URL=$(echo "$RELEASE" | jq -r '.assets[] | select(.name == "bs-demo-app-percy-changed-ios.ipa") | .browser_download_url')
+          echo "Downloading changed iOS IPA from: $IPA_URL"
+          curl -L "$IPA_URL" -o app.ipa
+
+          # Upload Android to BrowserStack with changed custom ID
+          echo "Uploading changed Android app to BrowserStack..."
+          curl -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@app.apk" \
+            -F "custom_id=bs-demo-app-percy-changed-android"
+
+          # Upload iOS to BrowserStack with changed custom ID
+          echo "Uploading changed iOS app to BrowserStack..."
+          curl -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@app.ipa" \
+            -F "custom_id=bs-demo-app-percy-changed-ios"
+        env:
+          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
+          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+
+      - name: Create and Push Branch
+        run: |
+          if [ "${{ github.event.inputs.figma_comparison }}" = "true" ]; then
+            BRANCH_NAME="figma"
+          else
+            BRANCH_NAME="changed_${{ github.actor }}"
+          fi
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+          echo "Percy mobile run triggered by ${{ github.actor }} at $(date)" >> .percy-trigger
+          git add .percy-trigger
+          git commit -m "chore: percy mobile run by ${{ github.actor }}" --allow-empty
+          git push origin "$BRANCH_NAME" --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Percy Mobile Visual Tests
         run: npm run wdio:app-percy
         env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
-          PERCY_BRANCH: changed_${{ github.event.inputs.username }}
-          PERCY_TARGET_BRANCH: Figma
-          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
-          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
+          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
+          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+          BUILD_COMPARISON: ${{ github.event.inputs.build_comparison }}
+          FIGMA_COMPARISON: ${{ github.event.inputs.figma_comparison }}
