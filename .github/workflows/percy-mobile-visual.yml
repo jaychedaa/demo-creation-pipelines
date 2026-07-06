@@ -7,14 +7,6 @@ on:
         description: "Percy Token (leave blank to use stored secret)"
         required: false
         type: string
-      bs_username:
-        description: "BrowserStack Username"
-        required: true
-        type: string
-      bs_access_key:
-        description: "BrowserStack Access Key"
-        required: true
-        type: string
       build_comparison:
         description: "Build Comparison (compare against master baseline)"
         required: false
@@ -75,8 +67,8 @@ jobs:
             -F "file=@app.ipa" \
             -F "custom_id=bs-demo-app-percy-changed-ios"
         env:
-          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
-          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
       - name: Create and Push Branch
         run: |
@@ -102,20 +94,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Percy Mobile Visual Tests
+      - name: Run Percy Mobile Visual Tests (changed_${{ github.actor }} branch)
         run: npm run wdio:app-percy
         env:
           PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
-          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
-          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
           BUILD_COMPARISON: ${{ github.event.inputs.build_comparison }}
           FIGMA_COMPARISON: ${{ github.event.inputs.figma_comparison }}
 
-      - name: Run Percy Figma Comparison
+      - name: Run Percy Mobile Visual Tests (figma branch)
         if: ${{ github.event.inputs.figma_comparison == 'true' }}
         run: npx wdio run config/wdio.app-percy.conf.ts --spec test/specs/percy-mobile/percy-figma-comparison.e2e.ts
         env:
           PERCY_TOKEN: ${{ github.event.inputs.percy_token || secrets.PERCY_TOKEN }}
-          BROWSERSTACK_USERNAME: ${{ github.event.inputs.bs_username }}
-          BROWSERSTACK_ACCESS_KEY: ${{ github.event.inputs.bs_access_key }}
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
           FIGMA_COMPARISON: "true"
